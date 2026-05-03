@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Manager Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #333; }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white; padding: 16px 32px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .navbar h1 { font-size: 22px; font-weight: 600; }
+        .navbar .subtitle { font-size: 13px; opacity: 0.8; }
+
+        .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px; margin-bottom: 24px;
+        }
+        .stat-card {
+            background: white; border-radius: 12px; padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: transform 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .stat-card .icon { font-size: 28px; margin-bottom: 8px; }
+        .stat-card .value { font-size: 32px; font-weight: 700; color: #333; }
+        .stat-card .label { font-size: 13px; color: #888; margin-top: 4px; }
+
+        /* Grid layout */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        @media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        .card {
+            background: white; border-radius: 12px; padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #555; }
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed #ccc; border-radius: 12px; padding: 40px;
+            text-align: center; cursor: pointer; transition: all 0.3s;
+            margin-bottom: 24px; background: white;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #667eea; background: #f8f9ff;
+        }
+        .upload-area .icon { font-size: 48px; margin-bottom: 12px; }
+        .upload-area p { color: #888; }
+        .upload-area input[type="file"] { display: none; }
+
+        /* Progress */
+        .upload-progress {
+            display: none; background: white; border-radius: 12px;
+            padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .progress-bar {
+            height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; margin: 12px 0;
+        }
+        .progress-bar .fill {
+            height: 100%; background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px; transition: width 0.3s; width: 0%;
+        }
+        .upload-result {
+            display: none; padding: 16px; border-radius: 8px; margin-top: 12px;
+        }
+        .upload-result.success { background: #d4edda; color: #155724; }
+        .upload-result.error { background: #f8d7da; color: #721c24; }
+
+        /* Table */
+        .doc-table { width: 100%; border-collapse: collapse; }
+        .doc-table th, .doc-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eee; font-size: 14px; }
+        .doc-table th { font-weight: 600; color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .doc-table tr:hover { background: #f8f9fa; }
+
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 12px;
+            font-size: 11px; font-weight: 600;
+        }
+        .badge-telegram { background: #e3f2fd; color: #1565c0; }
+        .badge-web { background: #e8f5e9; color: #2e7d32; }
+        .badge-email { background: #fff3e0; color: #e65100; }
+        .badge-cat { background: #f3e5f5; color: #6a1b9a; }
+
+        /* Filter bar */
+        .filter-bar {
+            display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+        }
+        .filter-bar select, .filter-bar input {
+            padding: 8px 14px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 14px; background: white;
+        }
+        .btn {
+            padding: 8px 20px; border: none; border-radius: 8px; font-size: 14px;
+            cursor: pointer; font-weight: 600; transition: all 0.2s;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-outline { background: white; border: 1px solid #ddd; color: #555; }
+        .btn-outline:hover { background: #f8f9fa; }
+
+        .empty-state { text-align: center; padding: 40px; color: #aaa; }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div>
+            <h1>📄 Document Manager</h1>
+            <div class="subtitle">Telegram → Google Drive → AI Classification → Reports</div>
+        </div>
+        <div>
+            <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="loadStats()">🔄 รีเฟรช</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card"><div class="icon">📄</div><div class="value" id="totalDocs">-</div><div class="label">เอกสารทั้งหมด</div></div>
+            <div class="stat-card"><div class="icon">📅</div><div class="value" id="todayDocs">-</div><div class="label">วันนี้</div></div>
+            <div class="stat-card"><div class="icon">📁</div><div class="value" id="totalCats">-</div><div class="label">หมวดหมู่</div></div>
+            <div class="stat-card"><div class="icon">📨</div><div class="value" id="totalSources">-</div><div class="label">แหล่งที่มา</div></div>
+        </div>
+
+        <!-- Upload -->
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+            <div class="icon">📎</div>
+            <p><strong>คลิกหรือลากไฟล์มาวางที่นี่</strong></p>
+            <p>รองรับ: ภาพ, PDF, Word, Excel</p>
+            <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" multiple>
+        </div>
+        <div class="upload-progress" id="uploadProgress">
+            <div>กำลังอัพโหลดและประมวลผล...</div>
+            <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+            <div class="upload-result" id="uploadResult"></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid-2">
+            <div class="card">
+                <h2>📊 เอกสารแยกตามหมวดหมู่</h2>
+                <canvas id="categoryChart" height="260"></canvas>
+            </div>
+            <div class="card">
+                <h2>📨 เอกสารแยกตามแหล่งที่มา</h2>
+                <canvas id="sourceChart" height="260"></canvas>
+            </div>
+        </div>
+
+        <!-- Documents Table -->
+        <div class="card" style="margin-top:24px">
+            <h2>📋 เอกสารล่าสุด</h2>
+            <div class="filter-bar">
+                <select id="filterCategory" onchange="loadDocuments()">
+                    <option value="">ทุกหมวดหมู่</option>
+                </select>
+                <select id="filterSource" onchange="loadDocuments()">
+                    <option value="">ทุกแหล่งที่มา</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="web">Web Upload</option>
+                    <option value="email">Email</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadDocuments()">🔍 ค้นหา</button>
+                <button class="btn btn-outline" onclick="downloadReport('daily')">📊 Daily Report</button>
+                <button class="btn btn-outline" onclick="downloadReport('weekly')">📊 Weekly Report</button>
+            </div>
+            <div id="documentsTable">
+                <div class="empty-state"><div class="icon">📭</div><p>ยังไม่มีเอกสาร</p></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let categoryChartInstance = null;
+        let sourceChartInstance = null;
+
+        // ===== Stats & Charts =====
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+
+                document.getElementById('totalDocs').textContent = data.total_documents;
+                document.getElementById('todayDocs').textContent = data.today_documents;
+                document.getElementById('totalCats').textContent = Object.keys(data.by_category).length;
+                document.getElementById('totalSources').textContent = Object.keys(data.by_source).length;
+
+                // Category filter
+                const filterCat = document.getElementById('filterCategory');
+                const current = filterCat.value;
+                filterCat.innerHTML = '<option value="">ทุกหมวดหมู่</option>';
+                Object.keys(data.by_category).forEach(cat => {
+                    filterCat.innerHTML += `<option value="${cat}">${cat} (${data.by_category[cat]})</option>`;
+                });
+                filterCat.value = current;
+
+                renderCategoryChart(data.by_category);
+                renderSourceChart(data.by_source);
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+
+        function renderCategoryChart(data) {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            if (categoryChartInstance) categoryChartInstance.destroy();
+
+            const colors = ['#667eea','#764ba2','#f093fb','#f5576c','#4facfe','#00f2fe','#43e97b','#fa709a','#fee140'];
+            categoryChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{ data: Object.values(data), backgroundColor: colors.slice(0, Object.keys(data).length), borderWidth: 0 }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { padding: 12, font: { size: 12 } } } } }
+            });
+        }
+
+        function renderSourceChart(data) {
+            const ctx = document.getElementById('sourceChart').getContext('2d');
+            if (sourceChartInstance) sourceChartInstance.destroy();
+
+            const colorMap = { telegram: '#0088cc', web: '#43e97b', email: '#fa709a' };
+            sourceChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{ label: 'จำนวนเอกสาร', data: Object.values(data), backgroundColor: Object.keys(data).map(k => colorMap[k] || '#667eea'), borderRadius: 8 }]
+                },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+            });
+        }
+
+        // ===== Documents =====
+        async function loadDocuments() {
+            const category = document.getElementById('filterCategory').value;
+            const source = document.getElementById('filterSource').value;
+            let url = `/api/documents?limit=50`;
+            if (category) url += `&category=${encodeURIComponent(category)}`;
+            if (source) url += `&source=${source}`;
+
+            try {
+                const res = await fetch(url);
+                const docs = await res.json();
+
+                if (!docs.length) {
+                    document.getElementById('documentsTable').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>ไม่พบเอกสาร</p></div>';
+                    return;
+                }
+
+                let html = `<table class="doc-table"><thead><tr>
+                    <th>ชื่อไฟล์</th><th>หมวดหมู่</th><th>สรุป</th><th>แหล่ง</th><th>วันที่</th><th></th>
+                </tr></thead><tbody>`;
+
+                docs.forEach(d => {
+                    const srcClass = d.source === 'telegram' ? 'badge-telegram' : d.source === 'web' ? 'badge-web' : 'badge-email';
+                    const date = d.created_at ? new Date(d.created_at).toLocaleString('th-TH') : '-';
+                    const link = d.gdrive_url ? `<a href="${d.gdrive_url}" target="_blank" style="color:#667eea">ดูไฟล์</a>` : '-';
+                    html += `<tr>
+                        <td><strong>${d.filename}</strong></td>
+                        <td><span class="badge badge-cat">${d.category || '-'}</span></td>
+                        <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.summary || '-'}</td>
+                        <td><span class="badge ${srcClass}">${d.source}</span></td>
+                        <td style="white-space:nowrap">${date}</td>
+                        <td>${link}</td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+                document.getElementById('documentsTable').innerHTML = html;
+            } catch (e) {
+                console.error('Failed to load documents:', e);
+            }
+        }
+
+        // ===== Upload =====
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', e => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+        async function handleFiles(files) {
+            const progress = document.getElementById('uploadProgress');
+            const result = document.getElementById('uploadResult');
+            const fill = document.getElementById('progressFill');
+            progress.style.display = 'block';
+            result.style.display = 'none';
+
+            for (let i = 0; i < files.length; i++) {
+                fill.style.width = `${((i) / files.length) * 100}%`;
+
+                const formData = new FormData();
+                formData.append('file', files[i]);
+                formData.append('sender_name', 'Web Dashboard');
+
+                try {
+                    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        result.className = 'upload-result success';
+                        result.innerHTML = `✅ <strong>${data.filename}</strong> → หมวดหมู่: ${data.category}<br>สรุป: ${data.summary}<br><a href="${data.gdrive_url}" target="_blank">ดูไฟล์บน Drive</a>`;
+                    } else {
+                        result.className = 'upload-result error';
+                        result.innerHTML = `❌ อัพโหลดไม่สำเร็จ: ${data.error || 'Unknown error'}`;
+                    }
+                    result.style.display = 'block';
+                } catch (e) {
+                    result.className = 'upload-result error';
+                    result.innerHTML = `❌ เกิดข้อผิดพลาด: ${e.message}`;
+                    result.style.display = 'block';
+                }
+            }
+            fill.style.width = '100%';
+            await loadStats();
+            await loadDocuments();
+        }
+
+        // ===== Report =====
+        async function downloadReport(period) {
+            try {
+                const res = await fetch(`/api/report/${period}`);
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `report_${period}_${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+            } catch (e) {
+                alert('ไม่สามารถดาวน์โหลด Report ได้');
+            }
+        }
+
+        // Initial load
+        loadStats();
+        loadDocuments();
+        setInterval(loadStats, 60000);
+    </script>
+</body>
+</html>
