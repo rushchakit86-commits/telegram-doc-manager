@@ -1,7 +1,8 @@
 import io
 import logging
 from pathlib import Path
-from google.oauth2.service_account import Credentials
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -31,23 +32,18 @@ class GoogleDriveService:
         self._folder_cache: dict[str, str] = {}
 
     def _get_credentials(self) -> Credentials:
-        import json as _json
-
-        creds_file = settings.GOOGLE_CREDENTIALS_FILE
-        # Read and fix potential \\n issue in private_key
-        try:
-            with open(creds_file, "r") as f:
-                creds_data = _json.load(f)
-            # Fix double-escaped newlines in private_key
-            if "private_key" in creds_data:
-                pk = creds_data["private_key"]
-                if "\\n" in pk and "\n" not in pk:
-                    creds_data["private_key"] = pk.replace("\\n", "\n")
-                    logger.info("Fixed double-escaped newlines in private_key")
-            creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
-        except Exception as e:
-            logger.warning(f"Failed to load creds from info, falling back to file: {e}")
-            creds = Credentials.from_service_account_file(creds_file, scopes=SCOPES)
+        """Get OAuth 2.0 user credentials using refresh token."""
+        creds = Credentials(
+            token=None,
+            refresh_token=settings.GOOGLE_OAUTH_REFRESH_TOKEN,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+            client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
+            scopes=SCOPES,
+        )
+        # Refresh to get a valid access token
+        creds.refresh(Request())
+        logger.info("OAuth 2.0 credentials refreshed successfully")
         return creds
 
     @property
