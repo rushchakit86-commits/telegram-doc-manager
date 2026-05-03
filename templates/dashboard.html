@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document Manager Dashboard</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #333; }
@@ -212,6 +212,7 @@
         }
 
         function renderCategoryChart(data) {
+            if (typeof Chart === 'undefined') { console.warn('Chart.js not loaded'); return; }
             const ctx = document.getElementById('categoryChart').getContext('2d');
             if (categoryChartInstance) categoryChartInstance.destroy();
 
@@ -227,6 +228,7 @@
         }
 
         function renderSourceChart(data) {
+            if (typeof Chart === 'undefined') { console.warn('Chart.js not loaded'); return; }
             const ctx = document.getElementById('sourceChart').getContext('2d');
             if (sourceChartInstance) sourceChartInstance.destroy();
 

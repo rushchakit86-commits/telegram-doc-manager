@@ -113,47 +113,72 @@ async def upload_file(
     from app.google_drive import gdrive_service
     import json
 
-    file_bytes = await file.read()
-    filename = file.filename or "unknown"
-    mime_type = file.content_type or "application/octet-stream"
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
+    try:
+        file_bytes = await file.read()
+        filename = file.filename or "unknown"
+        mime_type = file.content_type or "application/octet-stream"
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
 
-    # Classify
-    classification = await classify_document(file_bytes, filename, ext, mime_type)
-    category = classification.get("category", "อื่นๆ")
+        # Classify
+        try:
+            classification = await classify_document(file_bytes, filename, ext, mime_type)
+        except Exception as e:
+            logger.error(f"Classification failed: {e}", exc_info=True)
+            classification = {
+                "category": "อื่นๆ",
+                "subcategory": "",
+                "summary": f"จำแนกไม่สำเร็จ: {str(e)[:100]}",
+                "confidence": 0.0,
+                "tags": [],
+            }
+        category = classification.get("category", "อื่นๆ")
 
-    # Upload to Drive
-    drive_result = await gdrive_service.upload_file(file_bytes, filename, mime_type, category)
+        # Upload to Drive
+        try:
+            drive_result = await gdrive_service.upload_file(file_bytes, filename, mime_type, category)
+        except Exception as e:
+            logger.error(f"Google Drive upload failed: {e}", exc_info=True)
+            return JSONResponse({
+                "success": False,
+                "error": f"Google Drive upload failed: {str(e)[:200]}",
+            }, status_code=500)
 
-    # Save to DB
-    async with async_session() as session:
-        doc = Document(
-            original_filename=filename,
-            file_type=ext,
-            file_size=len(file_bytes),
-            mime_type=mime_type,
-            category=category,
-            subcategory=classification.get("subcategory", ""),
-            ai_summary=classification.get("summary", ""),
-            ai_confidence=classification.get("confidence", 0),
-            tags=json.dumps(classification.get("tags", []), ensure_ascii=False),
-            gdrive_file_id=drive_result["file_id"],
-            gdrive_folder_id=drive_result["folder_id"],
-            gdrive_url=drive_result["url"],
-            sender_name=sender_name,
-            source="web",
-            notes=notes,
-        )
-        session.add(doc)
-        await session.commit()
+        # Save to DB
+        async with async_session() as session:
+            doc = Document(
+                original_filename=filename,
+                file_type=ext,
+                file_size=len(file_bytes),
+                mime_type=mime_type,
+                category=category,
+                subcategory=classification.get("subcategory", ""),
+                ai_summary=classification.get("summary", ""),
+                ai_confidence=classification.get("confidence", 0),
+                tags=json.dumps(classification.get("tags", []), ensure_ascii=False),
+                gdrive_file_id=drive_result["file_id"],
+                gdrive_folder_id=drive_result["folder_id"],
+                gdrive_url=drive_result["url"],
+                sender_name=sender_name,
+                source="web",
+                notes=notes,
+            )
+            session.add(doc)
+            await session.commit()
 
-    return JSONResponse({
-        "success": True,
-        "filename": filename,
-        "category": category,
-        "summary": classification.get("summary", ""),
-        "gdrive_url": drive_result["url"],
-    })
+        return JSONResponse({
+            "success": True,
+            "filename": filename,
+            "category": category,
+            "summary": classification.get("summary", ""),
+            "gdrive_url": drive_result["url"],
+        })
+
+    except Exception as e:
+        logger.error(f"Upload endpoint error: {e}", exc_info=True)
+        return JSONResponse({
+            "success": False,
+            "error": f"Upload failed: {str(e)[:200]}",
+        }, status_code=500)
 
 
 # ======== API Endpoints ========

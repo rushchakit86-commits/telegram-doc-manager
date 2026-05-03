@@ -31,9 +31,23 @@ class GoogleDriveService:
         self._folder_cache: dict[str, str] = {}
 
     def _get_credentials(self) -> Credentials:
-        creds = Credentials.from_service_account_file(
-            settings.GOOGLE_CREDENTIALS_FILE, scopes=SCOPES
-        )
+        import json as _json
+
+        creds_file = settings.GOOGLE_CREDENTIALS_FILE
+        # Read and fix potential \\n issue in private_key
+        try:
+            with open(creds_file, "r") as f:
+                creds_data = _json.load(f)
+            # Fix double-escaped newlines in private_key
+            if "private_key" in creds_data:
+                pk = creds_data["private_key"]
+                if "\\n" in pk and "\n" not in pk:
+                    creds_data["private_key"] = pk.replace("\\n", "\n")
+                    logger.info("Fixed double-escaped newlines in private_key")
+            creds = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
+        except Exception as e:
+            logger.warning(f"Failed to load creds from info, falling back to file: {e}")
+            creds = Credentials.from_service_account_file(creds_file, scopes=SCOPES)
         return creds
 
     @property
